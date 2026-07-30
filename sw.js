@@ -3,7 +3,7 @@
  * 支持 PWA 离线运行与 Web Share Target（从安卓相册等应用分享图片/视频到本工具）
  */
 
-const CACHE_NAME = 'meme-generator-v4';
+const CACHE_NAME = 'meme-generator-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -14,6 +14,8 @@ const ASSETS = [
   './js/app.js',
   './js/gif.js',
   './js/gif.worker.js',
+  './js/supabase-config.js',
+  './js/supabase-backend.js',
   './hot-topics.json',
   './assets/models/tiny_face_detector_model-weights_manifest.json',
   './assets/models/tiny_face_detector_model-shard1',

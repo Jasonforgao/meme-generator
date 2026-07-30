@@ -58,14 +58,21 @@
     animatedResult: null,
     seed: 0,
     isGenerating: false,
-    totalCount: parseInt(localStorage.getItem('meme_total_count') || '0', 10)
+    totalCount: 1123, // 默认基础数量
+    globalCounter: null // Supabase 全局计数器
   };
 
   // 初始化
   async function init() {
     bindEvents();
     renderStyleOptions();
+
+    // 初始化 Supabase 后端
+    SupabaseBackend.init();
+
+    // 渲染展示区（先渲染本地缓存，再异步拉取全网数据）
     renderShowcase();
+    loadGlobalShowcase();
 
     // 检查是否由 Web Share Target 进入
     checkSharedFile();
@@ -75,9 +82,8 @@
       await ExpressionModule.loadModels();
       updateStatus('AI 模型加载完成，请上传图片/视频', false);
     } catch (err) {
-      console.error(err);
-      updateStatus('模型加载失败，请刷新重试', false);
-      showError('AI 模型加载失败：' + (err.message || '未知错误'));
+      console.warn('模型加载失败，用户仍可手动选择风格:', err);
+      updateStatus('AI 模型加载失败，你仍可上传照片并手动选择风格', false);
     }
 
     // 静默拉取热梗
@@ -318,20 +324,33 @@
     isCameraMode = false;
   }
 
-  // 检测人脸并渲染
+  // 检测人脸并渲染（检测失败不阻塞流程）
   async function detectAndRender() {
     updateStatus('正在识别人脸与表情…', true);
     hideError();
+
+    // 无论检测结果如何，都确保选项区可见
+    const showOptionsAnyway = () => {
+      showSection(els.optionsSection);
+      els.optionsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
 
     try {
       const result = await ExpressionModule.detect(state.currentImage);
       drawFaceOverlay(result.faces);
 
       if (result.faces.length === 0) {
-        hideSection(els.optionsSection);
-        hideSection(els.resultSection);
-        updateStatus('未检测到人物，请换一张带人脸的图片', false);
-        showError('没有识别到人脸，工具无法生成基于人物的表情。请上传正面、光线充足、人物清晰的图片/视频。');
+        // 未检测到人脸 → 使用默认表情，不阻塞流程
+        state.expression = 'neutral';
+        state.expressionLabel = '平静';
+        state.faceBoxes = [];
+
+        els.faceCount.textContent = '未检测到人脸';
+        els.expressionBadge.textContent = '表情：自动选择「平静」😊';
+        showSection(els.detectInfo);
+
+        updateStatus('未检测到人脸，你可以手动选择风格继续生成', false);
+        showOptionsAnyway();
         return;
       }
 
@@ -344,14 +363,20 @@
       showSection(els.detectInfo);
 
       updateStatus('识别完成，请选择生成风格', false);
-      showSection(els.optionsSection);
-
-      // 自动滚动到选项区
-      els.optionsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showOptionsAnyway();
     } catch (err) {
-      console.error(err);
-      updateStatus('识别失败', false);
-      showError('人脸检测出错：' + (err.message || '请重试'));
+      // 检测出错 → 使用默认表情，不阻塞流程
+      console.warn('人脸检测出错，使用默认表情继续:', err);
+      state.expression = 'neutral';
+      state.expressionLabel = '平静';
+      state.faceBoxes = [];
+
+      els.faceCount.textContent = '检测异常';
+      els.expressionBadge.textContent = '表情：自动选择「平静」😊';
+      showSection(els.detectInfo);
+
+      updateStatus('表情识别异常，你可以手动选择风格继续', false);
+      showOptionsAnyway();
     }
   }
 
@@ -557,31 +582,126 @@
     });
   }
 
-  // 展示区：保存和渲染
+  // 展示区：保存和渲染（Supabase 全网共享 + localStorage 本地备份）
   const SHOWCASE_KEY = 'meme_showcase';
   const MAX_SHOWCASE = 20;
+  const BASE_COUNT = 1123;
+
+  // 内置示例展示条目（新用户首次打开时看到的内容）
+  const SAMPLE_SHOWCASE = [
+    { caption: '笑不活了家人们', style: '沙雕吐槽', expression: '开心', color: '#e94560' },
+    { caption: '瞳孔地震中', style: '震惊体', expression: '惊讶', color: '#533483' },
+    { caption: '我佛了', style: '经典上下字', expression: '平静', color: '#0f3460' },
+    { caption: '气到变形', style: '阴阳怪气', expression: '生气', color: '#e74c3c' },
+    { caption: '社死现场直播', style: '社死现场', expression: '害怕', color: '#2ecc71' },
+    { caption: '可爱到犯规', style: '可爱治愈', expression: '开心', color: '#ff9ff3' },
+    { caption: '今日份emo', style: '电影字幕', expression: '难过', color: '#48dbfb' },
+    { caption: '精神状态遥遥领先', style: '沙雕吐槽', expression: '开心', color: '#feca57' },
+    { caption: '我直接愣住', style: '震惊体', expression: '惊讶', color: '#6c5ce7' },
+    { caption: '面无表情打工', style: '经典上下字', expression: '平静', color: '#00b894' }
+  ];
+
+  // 生成示例条目的缩略图（canvas 绘制的彩色卡片）
+  function generateSampleThumbnail(item) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 120;
+    const ctx = canvas.getContext('2d');
+
+    // 背景渐变
+    const grad = ctx.createLinearGradient(0, 0, 100, 120);
+    grad.addColorStop(0, item.color || '#e94560');
+    grad.addColorStop(1, '#1a1a2e');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 100, 120);
+
+    // 表情 emoji
+    const emojiMap = { '开心': '😂', '惊讶': '😱', '平静': '😐', '生气': '😡', '害怕': '😨', '难过': '😢', '厌恶': '🤢' };
+    ctx.font = '36px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(emojiMap[item.expression] || '😂', 50, 55);
+
+    // 底部文案
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 90, 100, 30);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText(item.caption || '', 50, 108);
+
+    return canvas.toDataURL('image/jpeg', 0.6);
+  }
+
+  // 从 Supabase 加载全网展示数据
+  async function loadGlobalShowcase() {
+    if (!SupabaseBackend.ready()) return;
+
+    try {
+      // 并行获取计数器和展示条目
+      const [counter, items] = await Promise.all([
+        SupabaseBackend.getCounter(),
+        SupabaseBackend.getShowcaseItems(MAX_SHOWCASE)
+      ]);
+
+      if (counter !== null) {
+        state.globalCounter = counter;
+        state.totalCount = counter;
+      }
+
+      if (items && items.length > 0) {
+        // 用全网数据替换本地展示
+        renderShowcaseItems(items.map(item => ({
+          thumb: item.thumbnail || '',
+          caption: item.caption || '',
+          style: item.style || '',
+          expression: item.expression || ''
+        })));
+      }
+
+      updateCounterDisplay();
+    } catch (e) {
+      console.warn('加载全网展示数据失败:', e);
+    }
+  }
 
   function saveToShowcase(result, style, expressionLabel) {
     if (!result || !result.dataUrl) return;
 
     // 生成缩略图（异步）
-    createThumbnail(result.dataUrl, 200).then(thumbDataUrl => {
-      // 保存到 localStorage
-      let items = [];
-      try { items = JSON.parse(localStorage.getItem(SHOWCASE_KEY) || '[]'); } catch (e) {}
-      items.unshift({
+    createThumbnail(result.dataUrl, 100).then(thumbDataUrl => {
+      const entry = {
         thumb: thumbDataUrl,
         caption: result.caption || '',
         style: style?.name || '',
         expression: expressionLabel || '',
         time: Date.now()
-      });
-      if (items.length > MAX_SHOWCASE) items = items.slice(0, MAX_SHOWCASE);
-      try { localStorage.setItem(SHOWCASE_KEY, JSON.stringify(items)); } catch (e) { /* quota */ }
+      };
 
-      // 更新计数
+      // 保存到本地 localStorage
+      let items = [];
+      try { items = JSON.parse(localStorage.getItem(SHOWCASE_KEY) || '[]'); } catch (e) {}
+      items.unshift(entry);
+      if (items.length > MAX_SHOWCASE) items = items.slice(0, MAX_SHOWCASE);
+      try { localStorage.setItem(SHOWCASE_KEY, JSON.stringify(items)); } catch (e) {}
+
+      // 更新计数器
       state.totalCount++;
-      localStorage.setItem('meme_total_count', String(state.totalCount));
+
+      // 保存到 Supabase（全网共享）
+      if (SupabaseBackend.ready()) {
+        SupabaseBackend.incrementCounter().then(newVal => {
+          if (newVal !== null) {
+            state.globalCounter = newVal;
+            state.totalCount = newVal;
+            updateCounterDisplay();
+          }
+        });
+        SupabaseBackend.addShowcaseItem({
+          thumbnail: thumbDataUrl,
+          caption: result.caption || '',
+          style: style?.name || '',
+          expression: expressionLabel || ''
+        });
+      }
 
       // 重新渲染展示区
       renderShowcase();
@@ -594,41 +714,61 @@
       img.onload = () => {
         const canvas = document.createElement('canvas');
         canvas.width = maxSize;
-        canvas.height = maxSize;
+        canvas.height = Math.round(maxSize * 1.2);
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, maxSize, maxSize);
-        resolve(canvas.toDataURL('image/jpeg', 0.6));
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.5));
       };
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;
     });
   }
 
-  function renderShowcase() {
-    let items = [];
-    try { items = JSON.parse(localStorage.getItem(SHOWCASE_KEY) || '[]'); } catch (e) {}
-
-    // 加上基础数量（模拟全局热度）
-    const baseCount = 1247;
-    const displayCount = baseCount + state.totalCount;
+  function updateCounterDisplay() {
     if (els.showcaseCount) {
-      els.showcaseCount.textContent = `已生成 ${displayCount.toLocaleString()} 张`;
+      const count = state.globalCounter || state.totalCount || BASE_COUNT;
+      els.showcaseCount.textContent = `已生成 ${count.toLocaleString()} 张`;
     }
+  }
+
+  // 渲染展示区条目到 DOM
+  function renderShowcaseItems(items) {
+    if (!els.showcaseScroll || !items || items.length === 0) return;
+
+    els.showcaseScroll.innerHTML = items.map(item => {
+      const thumbSrc = item.thumb || generateSampleThumbnail({ caption: item.caption, expression: item.expression, color: '#e94560' });
+      return `
+        <div class="showcase-item">
+          <img src="${thumbSrc}" alt="${item.caption || ''}" loading="lazy">
+          <div class="showcase-caption">${item.caption || ''}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderShowcase() {
+    // 更新计数器显示
+    updateCounterDisplay();
 
     if (!els.showcaseScroll) return;
 
-    if (items.length === 0) {
-      // 无数据时显示提示
-      els.showcaseScroll.innerHTML = '<div class="showcase-empty">生成表情包后会展示在这里 ✨</div>';
+    // 优先使用本地缓存数据
+    let items = [];
+    try { items = JSON.parse(localStorage.getItem(SHOWCASE_KEY) || '[]'); } catch (e) {}
+
+    if (items.length > 0) {
+      renderShowcaseItems(items);
       return;
     }
 
-    els.showcaseScroll.innerHTML = items.map(item => `
-      <div class="showcase-item">
-        <img src="${item.thumb}" alt="${item.caption}" loading="lazy">
-        <div class="showcase-caption">${item.caption}</div>
-      </div>
-    `).join('');
+    // 无本地数据时，显示内置示例条目
+    const sampleItems = SAMPLE_SHOWCASE.map(item => ({
+      thumb: generateSampleThumbnail(item),
+      caption: item.caption,
+      style: item.style,
+      expression: item.expression
+    }));
+    renderShowcaseItems(sampleItems);
   }
 
   // 启动

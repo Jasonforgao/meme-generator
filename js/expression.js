@@ -45,15 +45,32 @@ const ExpressionModule = (() => {
   async function detect(input) {
     await loadModels();
 
-    const options = new faceapi.TinyFaceDetectorOptions({
-      inputSize: 416,
-      scoreThreshold: 0.5
-    });
+    // 多轮检测策略：逐步降低阈值 + 增大输入尺寸，提高检测成功率
+    const attempts = [
+      { inputSize: 512, scoreThreshold: 0.3 },
+      { inputSize: 608, scoreThreshold: 0.2 },
+      { inputSize: 416, scoreThreshold: 0.15 }
+    ];
 
-    const detections = await faceapi
-      .detectAllFaces(input, options)
-      .withFaceLandmarks()
-      .withFaceExpressions();
+    let detections = [];
+    for (const opts of attempts) {
+      const options = new faceapi.TinyFaceDetectorOptions({
+        inputSize: opts.inputSize,
+        scoreThreshold: opts.scoreThreshold
+      });
+
+      try {
+        detections = await faceapi
+          .detectAllFaces(input, options)
+          .withFaceLandmarks()
+          .withFaceExpressions();
+      } catch (e) {
+        console.warn(`检测尝试失败 (inputSize=${opts.inputSize}):`, e);
+        continue;
+      }
+
+      if (detections && detections.length > 0) break;
+    }
 
     if (!detections || detections.length === 0) {
       return { faces: [], dominant: null, expressions: null, landmarks: [] };
