@@ -52,6 +52,17 @@
         <canvas id="captureCanvas" hidden></canvas>
       </section>
 
+      <!-- 热梗源设置 -->
+      <section class="card hot-topics-card" id="hotTopicsSection">
+        <h2>🔥 网络热梗库（每日自动更新）</h2>
+        <p class="hot-topics-hint">输入热梗 JSON 源地址，生成时会自动融入表情包文案。留空则使用默认热梗库。</p>
+        <div class="hot-topics-row">
+          <input type="text" id="hotTopicsUrl" placeholder="https://your-cdn.com/hot-topics.json">
+          <button class="btn btn-secondary" id="refreshHotTopicsBtn">🔄 刷新</button>
+        </div>
+        <p class="hot-topics-status" id="hotTopicsStatus">正在拉取热梗…</p>
+      </section>
+
       <!-- 预览与识别状态 -->
       <section class="card preview-card hidden" id="previewSection">
         <h2>📤 素材预览</h2>

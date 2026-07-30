@@ -334,6 +334,55 @@ html, body {
   margin-top: 12px;
 }
 
+/* 热梗源设置 */
+.hot-topics-card h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.hot-topics-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.hot-topics-row {
+  display: flex;
+  gap: 8px;
+}
+
+.hot-topics-row input[type="text"] {
+  flex: 1;
+  padding: 10px 12px;
+  border: 2px solid var(--surface-light);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  transition: border-color 0.2s;
+}
+
+.hot-topics-row input[type="text"]:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.hot-topics-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-height: 18px;
+}
+
+.hot-topics-status.success {
+  color: var(--success);
+}
+
+.hot-topics-status.error {
+  color: var(--error);
+}
+
 /* 结果区 */
 .result-tabs {
   display: flex;

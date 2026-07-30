@@ -37,7 +37,11 @@
     downloadBtn: document.getElementById('downloadBtn'),
     regenerateBtn: document.getElementById('regenerateBtn'),
     backBtn: document.getElementById('backBtn'),
-    resultTabs: document.querySelectorAll('.tab-btn')
+    resultTabs: document.querySelectorAll('.tab-btn'),
+    hotTopicsSection: document.getElementById('hotTopicsSection'),
+    hotTopicsUrl: document.getElementById('hotTopicsUrl'),
+    hotTopicsStatus: document.getElementById('hotTopicsStatus'),
+    refreshHotTopicsBtn: document.getElementById('refreshHotTopicsBtn')
   };
 
   // 状态
@@ -54,7 +58,8 @@
     staticResult: null,
     animatedResult: null,
     seed: 0,
-    isGenerating: false
+    isGenerating: false,
+    hotTopicsUrl: localStorage.getItem('hot_topics_url') || './hot-topics.json'
   };
 
   // 初始化
@@ -74,6 +79,9 @@
       updateStatus('模型加载失败，请刷新重试', false);
       showError('AI 模型加载失败：' + (err.message || '未知错误'));
     }
+
+    // 初始化热梗设置并拉取
+    initHotTopics();
   }
 
   // 处理从安卓相册等应用分享过来的文件
@@ -116,6 +124,56 @@
     });
   }
 
+  // 热梗设置初始化与拉取
+  function initHotTopics() {
+    if (els.hotTopicsUrl) {
+      els.hotTopicsUrl.value = state.hotTopicsUrl;
+    }
+    refreshHotTopics();
+    if (els.refreshHotTopicsBtn) {
+      els.refreshHotTopicsBtn.addEventListener('click', async () => {
+        if (els.hotTopicsUrl) {
+          state.hotTopicsUrl = els.hotTopicsUrl.value.trim() || './hot-topics.json';
+          localStorage.setItem('hot_topics_url', state.hotTopicsUrl);
+        }
+        // 清除本地缓存强制拉取
+        localStorage.removeItem(`hot_topics_cache_${state.hotTopicsUrl}`);
+        localStorage.removeItem(`hot_topics_time_${state.hotTopicsUrl}`);
+        await refreshHotTopics();
+      });
+    }
+  }
+
+  async function refreshHotTopics() {
+    if (els.hotTopicsStatus) {
+      els.hotTopicsStatus.textContent = '正在拉取热梗…';
+      els.hotTopicsStatus.classList.remove('success', 'error');
+    }
+    try {
+      const result = await MemeEngine.loadHotTopics(state.hotTopicsUrl, 60 * 24); // 缓存 1 天
+      if (result.success) {
+        if (els.hotTopicsStatus) {
+          els.hotTopicsStatus.textContent = `✓ 已加载 ${result.topics.length} 条热梗${result.fromCache ? '（本地缓存）' : ''}`;
+          els.hotTopicsStatus.classList.add('success');
+          els.hotTopicsStatus.classList.remove('error');
+        }
+      } else {
+        if (els.hotTopicsStatus) {
+          els.hotTopicsStatus.textContent = `✗ 拉取失败（${result.error || '未知'}），使用本地文案`;
+          els.hotTopicsStatus.classList.add('error');
+          els.hotTopicsStatus.classList.remove('success');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      if (els.hotTopicsStatus) {
+        els.hotTopicsStatus.textContent = `✗ 拉取异常：${err.message}`;
+        els.hotTopicsStatus.classList.add('error');
+        els.hotTopicsStatus.classList.remove('success');
+      }
+    }
+  }
+
   function bindEvents() {
     // 上传
     els.selectBtn.addEventListener('click', () => els.fileInput.click());
@@ -154,7 +212,7 @@
     // 文案编辑
     els.autoCaptionBtn.addEventListener('click', () => {
       state.seed++;
-      const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed);
+      const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed, MemeEngine.getHotTopics());
       els.captionInput.value = suggested;
       state.customCaption = suggested;
     });
@@ -172,7 +230,7 @@
       state.seed++;
       // 如果用户没手动改文案，继续用 AI 推荐；否则保留当前文案
       if (!state.customCaption) {
-        const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed);
+        const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed, MemeEngine.getHotTopics());
         els.captionInput.value = suggested;
       }
       generateForSelectedStyle();
@@ -200,7 +258,7 @@
         showSection(els.captionEdit);
 
         // 生成推荐文案并填入编辑框
-        const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle.id, state.seed);
+        const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle.id, state.seed, MemeEngine.getHotTopics());
         els.captionInput.value = suggested;
         state.customCaption = '';
 
@@ -389,7 +447,8 @@
         state.selectedStyle,
         state.seed,
         state.faceBoxes,
-        caption
+        caption,
+        MemeEngine.getHotTopics()
       );
       state.staticResult = staticRes;
 
@@ -401,6 +460,7 @@
         state.seed,
         state.faceBoxes,
         caption,
+        MemeEngine.getHotTopics(),
         (percent) => {
           els.gifProgressBar.style.setProperty('--percent', percent + '%');
           els.gifProgressText.textContent = percent + '%';
