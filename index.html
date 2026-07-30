@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a1a2e">
+  <title>梗图生成器 - 自制表情包神器</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    // 注册 Service Worker，支持 PWA 离线运行与 Web Share Target
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+          console.warn('Service Worker 注册失败:', err);
+        });
+      });
+    }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script defer src="js/gif.js"></script>
+  <script defer src="js/expression.js"></script>
+  <script defer src="js/meme-engine.js"></script>
+  <script defer src="js/app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>🎭 梗图生成器</h1>
+      <p class="subtitle">上传带人脸的照片或视频，AI 自动识别表情并生成网络热门表情包</p>
+    </header>
+
+    <main class="main">
+      <!-- 上传区域 -->
+      <section class="card upload-card" id="uploadSection">
+        <div class="upload-zone" id="dropZone">
+          <input type="file" id="fileInput" accept="image/*,video/*,image/png,image/jpeg,image/jpg,image/gif,image/webp,video/mp4,video/quicktime,video/webm" hidden>
+          <div class="upload-hint">
+            <div class="upload-icon">📸</div>
+            <p>点击选择或拖拽图片/视频到此处</p>
+            <p class="upload-sub">支持 JPG、PNG、GIF、MP4、MOV 等格式</p>
+          </div>
+        </div>
+        <div class="upload-actions">
+          <button class="btn btn-primary" id="selectBtn">选择文件</button>
+          <button class="btn btn-secondary" id="cameraBtn">📷 拍照</button>
+        </div>
+        <video id="cameraPreview" autoplay playsinline muted hidden></video>
+        <canvas id="captureCanvas" hidden></canvas>
+      </section>
+
+      <!-- 预览与识别状态 -->
+      <section class="card preview-card hidden" id="previewSection">
+        <h2>📤 素材预览</h2>
+        <div class="preview-wrap">
+          <img id="sourceImage" alt="源素材" hidden>
+          <video id="sourceVideo" controls playsinline hidden></video>
+          <canvas id="faceOverlay"></canvas>
+        </div>
+        <div class="status-bar" id="statusBar">
+          <span class="spinner"></span>
+          <span id="statusText">正在加载 AI 模型...</span>
+        </div>
+        <div class="detect-info hidden" id="detectInfo">
+          <span class="badge" id="faceCount">检测到 0 张人脸</span>
+          <span class="badge badge-expression" id="expressionBadge">表情：--</span>
+        </div>
+        <div class="error-box hidden" id="errorBox"></div>
+      </section>
+
+      <!-- 生成选项 -->
+      <section class="card options-card hidden" id="optionsSection">
+        <h2>🎨 生成选项 <span class="options-tip">（点击风格并编辑文案后合成）</span></h2>
+        <div class="style-grid" id="styleGrid"></div>
+        <div class="caption-edit hidden" id="captionEdit">
+          <label for="captionInput">✏️ 表情包文案（可修改）</label>
+          <textarea id="captionInput" rows="2" placeholder="AI 推荐文案会显示在这里，你可以自由修改..."></textarea>
+          <div class="caption-actions">
+            <button class="btn btn-secondary" id="autoCaptionBtn">🎲 换一句推荐</button>
+            <button class="btn btn-primary" id="generateBtn">✨ 生成表情包</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 结果展示 -->
+      <section class="card result-card hidden" id="resultSection">
+        <h2>✨ 生成结果</h2>
+        <div class="result-tabs">
+          <button class="tab-btn active" data-type="static">静态图</button>
+          <button class="tab-btn" data-type="animated">动态 GIF</button>
+        </div>
+        <div class="result-wrap">
+          <img id="resultImage" alt="生成的表情包" hidden>
+          <img id="resultGif" alt="生成的动态表情包" hidden>
+          <div class="progress hidden" id="gifProgress">
+            <div class="progress-bar" id="gifProgressBar"></div>
+            <span id="gifProgressText">0%</span>
+          </div>
+        </div>
+        <div class="result-actions">
+          <button class="btn btn-primary" id="downloadBtn">💾 保存到本地</button>
+          <button class="btn btn-secondary" id="regenerateBtn">🔄 换一换</button>
+          <button class="btn btn-ghost" id="backBtn">← 重新上传</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>本地运行，素材不上传服务器 · 由 face-api.js 驱动表情识别</p>
+    </footer>
+  </div>
+
+  <!-- 隐藏的视频抽帧画布 -->
+  <canvas id="videoFrameCanvas" hidden></canvas>
+</body>
+</html>

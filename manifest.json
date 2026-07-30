@@ -1,0 +1,34 @@
+{
+  "name": "梗图生成器",
+  "short_name": "梗图生成",
+  "description": "上传带人脸的照片或视频，AI 自动生成网络热门表情包",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "orientation": "portrait-primary",
+  "scope": ".",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%23e94560' width='192' height='192' rx='32'/%3E%3Ctext x='96' y='120' font-size='100' text-anchor='middle'%3E🎭%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ],
+  "share_target": {
+    "action": "./share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": ["image/*", "video/*"]
+        }
+      ]
+    }
+  }
+}
