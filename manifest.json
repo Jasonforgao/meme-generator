@@ -1,6 +1,6 @@
 {
-  "name": "梗图生成器",
-  "short_name": "梗图生成",
+  "name": "糕糕表情生成器",
+  "short_name": "糕糕表情",
   "description": "上传带人脸的照片或视频，AI 自动生成网络热门表情包",
   "start_url": ".",
   "display": "standalone",
@@ -10,9 +10,14 @@
   "scope": ".",
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%23e94560' width='192' height='192' rx='32'/%3E%3Ctext x='96' y='120' font-size='100' text-anchor='middle'%3E🎭%3C/text%3E%3C/svg%3E",
+      "src": "assets/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ],
   "share_target": {
