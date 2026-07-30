@@ -12,7 +12,7 @@
     cameraBtn: document.getElementById('cameraBtn'),
     cameraPreview: document.getElementById('cameraPreview'),
     captureCanvas: document.getElementById('captureCanvas'),
-    previewSection: document.getElementById('previewSection'),
+    uploadSection: document.getElementById('uploadSection'),
     sourceImage: document.getElementById('sourceImage'),
     sourceVideo: document.getElementById('sourceVideo'),
     faceOverlay: document.getElementById('faceOverlay'),
@@ -22,13 +22,11 @@
     faceCount: document.getElementById('faceCount'),
     expressionBadge: document.getElementById('expressionBadge'),
     errorBox: document.getElementById('errorBox'),
-    optionsSection: document.getElementById('optionsSection'),
     styleGrid: document.getElementById('styleGrid'),
     captionEdit: document.getElementById('captionEdit'),
     captionInput: document.getElementById('captionInput'),
     autoCaptionBtn: document.getElementById('autoCaptionBtn'),
     generateBtn: document.getElementById('generateBtn'),
-    resultSection: document.getElementById('resultSection'),
     resultImage: document.getElementById('resultImage'),
     resultGif: document.getElementById('resultGif'),
     gifProgress: document.getElementById('gifProgress'),
@@ -40,7 +38,16 @@
     resultTabs: document.querySelectorAll('.tab-btn'),
     showcaseSection: document.getElementById('showcaseSection'),
     showcaseScroll: document.getElementById('showcaseScroll'),
-    showcaseCount: document.getElementById('showcaseCount')
+    showcaseCount: document.getElementById('showcaseCount'),
+    // 向导步骤元素
+    wizardProgress: document.getElementById('wizardProgress'),
+    wizardStep1: document.getElementById('wizardStep1'),
+    wizardStep2: document.getElementById('wizardStep2'),
+    wizardStep3: document.getElementById('wizardStep3'),
+    backToUploadBtn: document.getElementById('backToUploadBtn'),
+    continueToEditBtn: document.getElementById('continueToEditBtn'),
+    backToDetectBtn: document.getElementById('backToDetectBtn'),
+    backToEditBtn: document.getElementById('backToEditBtn')
   };
 
   // 状态
@@ -58,12 +65,19 @@
     animatedResult: null,
     seed: 0,
     isGenerating: false,
+    currentStep: 0, // 0=首页, 1=识别, 2=编辑, 3=结果
     totalCount: 1123, // 默认基础数量
     globalCounter: null // Supabase 全局计数器
   };
 
   // 初始化
   async function init() {
+    // 初始状态：隐藏向导，显示首页
+    els.wizardProgress.hidden = true;
+    els.wizardStep1.hidden = true;
+    els.wizardStep2.hidden = true;
+    els.wizardStep3.hidden = true;
+
     bindEvents();
     renderStyleOptions();
 
@@ -163,6 +177,12 @@
     // 拍照
     els.cameraBtn.addEventListener('click', toggleCamera);
 
+    // 向导导航按钮
+    els.backToUploadBtn.addEventListener('click', () => goToStep(0));
+    els.continueToEditBtn.addEventListener('click', () => goToStep(2));
+    els.backToDetectBtn.addEventListener('click', () => goToStep(1));
+    els.backToEditBtn.addEventListener('click', () => goToStep(2));
+
     // 结果页签
     els.resultTabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -193,14 +213,13 @@
     els.downloadBtn.addEventListener('click', downloadResult);
     els.regenerateBtn.addEventListener('click', () => {
       state.seed++;
-      // 如果用户没手动改文案，继续用 AI 推荐；否则保留当前文案
       if (!state.customCaption) {
         const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed, MemeEngine.getHotTopics(), state.expressionLabel);
         els.captionInput.value = suggested;
       }
       generateForSelectedStyle();
     });
-    els.backBtn.addEventListener('click', resetApp);
+    els.backBtn.addEventListener('click', () => goToStep(0));
   }
 
   function renderStyleOptions() {
@@ -222,14 +241,62 @@
         state.seed = 0;
         showSection(els.captionEdit);
 
-        // 生成推荐文案并填入编辑框
+        // 生成推荐文案
         const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle.id, state.seed, MemeEngine.getHotTopics(), state.expressionLabel);
         els.captionInput.value = suggested;
         state.customCaption = '';
 
-        // 滚动到文案编辑区
         els.captionEdit.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       });
+    });
+  }
+
+  // 向导步骤管理
+  function goToStep(step) {
+    state.currentStep = step;
+
+    // 首页：显示上传区和展示区，隐藏向导
+    if (step === 0) {
+      els.uploadSection.hidden = false;
+      if (els.showcaseSection) els.showcaseSection.hidden = false;
+      els.wizardProgress.hidden = true;
+      els.wizardStep1.hidden = true;
+      els.wizardStep2.hidden = true;
+      els.wizardStep3.hidden = true;
+      hideSection(els.captionEdit);
+      els.fileInput.value = '';
+      updateStatus('AI 模型加载完成，请上传图片/视频', false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // 向导步骤：隐藏首页元素
+    els.uploadSection.hidden = true;
+    if (els.showcaseSection) els.showcaseSection.hidden = true;
+    els.wizardProgress.hidden = false;
+
+    // 隐藏所有步骤
+    els.wizardStep1.hidden = true;
+    els.wizardStep2.hidden = true;
+    els.wizardStep3.hidden = true;
+
+    // 显示目标步骤
+    const targetEl = [null, els.wizardStep1, els.wizardStep2, els.wizardStep3][step];
+    if (targetEl) targetEl.hidden = false;
+
+    // 更新进度条
+    updateProgressIndicator(step);
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function updateProgressIndicator(step) {
+    const steps = els.wizardProgress.querySelectorAll('.wp-step');
+    steps.forEach(el => {
+      const s = parseInt(el.dataset.step);
+      el.classList.remove('active', 'done');
+      if (s === step) el.classList.add('active');
+      else if (s < step) el.classList.add('done');
     });
   }
 
@@ -244,7 +311,8 @@
     state.sourceType = type;
     state.sourceUrl = URL.createObjectURL(file);
 
-    showSection(els.previewSection);
+    // 进入步骤 1：预览与检测
+    goToStep(1);
     updateStatus('正在读取素材…', true);
 
     try {
@@ -329,18 +397,11 @@
     updateStatus('正在识别人脸与表情…', true);
     hideError();
 
-    // 无论检测结果如何，都确保选项区可见
-    const showOptionsAnyway = () => {
-      showSection(els.optionsSection);
-      els.optionsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
-
     try {
       const result = await ExpressionModule.detect(state.currentImage);
       drawFaceOverlay(result.faces);
 
       if (result.faces.length === 0) {
-        // 未检测到人脸 → 使用默认表情，不阻塞流程
         state.expression = 'neutral';
         state.expressionLabel = '平静';
         state.faceBoxes = [];
@@ -349,23 +410,19 @@
         els.expressionBadge.textContent = '表情：自动选择「平静」😊';
         showSection(els.detectInfo);
 
-        updateStatus('未检测到人脸，你可以手动选择风格继续生成', false);
-        showOptionsAnyway();
-        return;
+        updateStatus('未检测到人脸，你仍可手动选择风格继续生成', false);
+      } else {
+        state.expression = result.dominant;
+        state.expressionLabel = ExpressionModule.getExpressionLabel(result.dominant);
+        state.faceBoxes = result.faces.map(f => f.box);
+
+        els.faceCount.textContent = `检测到 ${result.faces.length} 张人脸`;
+        els.expressionBadge.textContent = `表情：${state.expressionLabel} ${ExpressionModule.getExpressionEmoji(state.expression)}`;
+        showSection(els.detectInfo);
+
+        updateStatus('识别完成，点击「继续选择风格」进入下一步', false);
       }
-
-      state.expression = result.dominant;
-      state.expressionLabel = ExpressionModule.getExpressionLabel(result.dominant);
-      state.faceBoxes = result.faces.map(f => f.box);
-
-      els.faceCount.textContent = `检测到 ${result.faces.length} 张人脸`;
-      els.expressionBadge.textContent = `表情：${state.expressionLabel} ${ExpressionModule.getExpressionEmoji(state.expression)}`;
-      showSection(els.detectInfo);
-
-      updateStatus('识别完成，请选择生成风格', false);
-      showOptionsAnyway();
     } catch (err) {
-      // 检测出错 → 使用默认表情，不阻塞流程
       console.warn('人脸检测出错，使用默认表情继续:', err);
       state.expression = 'neutral';
       state.expressionLabel = '平静';
@@ -375,8 +432,7 @@
       els.expressionBadge.textContent = '表情：自动选择「平静」😊';
       showSection(els.detectInfo);
 
-      updateStatus('表情识别异常，你可以手动选择风格继续', false);
-      showOptionsAnyway();
+      updateStatus('表情识别异常，你仍可手动选择风格', false);
     }
   }
 
@@ -418,7 +474,8 @@
     if (!state.selectedStyle || !state.currentImage) return;
 
     state.isGenerating = true;
-    hideSection(els.resultSection);
+    // 进入步骤 3：结果
+    goToStep(3);
     updateStatus('正在生成表情包…', true);
 
     try {
@@ -452,10 +509,8 @@
       );
       state.animatedResult = animatedRes;
 
-      showSection(els.resultSection);
       showResult();
       updateStatus('生成完成', false);
-      els.resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
       // 保存到展示区
       saveToShowcase(state.staticResult, state.selectedStyle, state.expressionLabel);
@@ -545,15 +600,13 @@
   function resetApp() {
     stopCamera();
     resetState(true);
-    hideSection(els.previewSection);
-    hideSection(els.optionsSection);
-    hideSection(els.resultSection);
-    hideError();
     els.sourceImage.src = '';
     els.sourceVideo.src = '';
-    els.fileInput.value = '';
-    updateStatus('AI 模型加载完成，请上传图片/视频', false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    hideError();
+    hideSection(els.detectInfo);
+    hideSection(els.captionEdit);
+    els.resultTabs.forEach(t => t.classList.toggle('active', t.dataset.type === 'static'));
+    goToStep(0);
   }
 
   function waitForImage(img) {

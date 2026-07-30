@@ -3,7 +3,7 @@
  * 支持 PWA 离线运行与 Web Share Target（从安卓相册等应用分享图片/视频到本工具）
  */
 
-const CACHE_NAME = 'meme-generator-v5';
+const CACHE_NAME = 'meme-generator-v6';
 const ASSETS = [
   './',
   './index.html',

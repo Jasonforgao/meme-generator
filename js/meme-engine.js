@@ -356,9 +356,12 @@ const MemeEngine = (() => {
     };
   }
 
-  // 绘制文字，自动换行
-  function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, align = 'center') {
-    ctx.textAlign = align;
+  // 增强文字绘制，支持自定义填充色和描边色
+  function drawText(ctx, text, x, y, maxWidth, lineHeight, opts = {}) {
+    const fill = opts.fill || 'white';
+    const stroke = opts.stroke || 'black';
+    const lw = opts.lineWidth != null ? opts.lineWidth : 4;
+    ctx.textAlign = opts.align || 'center';
     ctx.textBaseline = 'top';
     const chars = text.split('');
     let line = '';
@@ -366,114 +369,181 @@ const MemeEngine = (() => {
     for (const char of chars) {
       const test = line + char;
       const metrics = ctx.measureText(test);
-      if (metrics.width > maxWidth && line) {
-        lines.push(line);
-        line = char;
-      } else {
-        line = test;
-      }
+      if (metrics.width > maxWidth && line) { lines.push(line); line = char; }
+      else { line = test; }
     }
     if (line) lines.push(line);
-
     const totalHeight = lines.length * lineHeight;
     let startY = y - totalHeight / 2;
-    if (align === 'top') startY = y;
-    if (align === 'bottom') startY = y - totalHeight;
-
+    if (opts.baseline === 'top') startY = y;
+    if (opts.baseline === 'bottom') startY = y - totalHeight;
     for (let i = 0; i < lines.length; i++) {
       const ly = startY + i * lineHeight;
-      // 描边
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'black';
-      ctx.strokeText(lines[i], x, ly);
-      // 填充
-      ctx.fillStyle = 'white';
+      if (lw > 0) { ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.strokeText(lines[i], x, ly); }
+      ctx.fillStyle = fill;
       ctx.fillText(lines[i], x, ly);
     }
     return totalHeight;
   }
 
-  // 经典上下字
-  function renderClassic(ctx, img, width, height, caption, faceBoxes) {
+  // 原始 drawWrappedText 保持兼容
+  function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, align) {
+    return drawText(ctx, text, x, y, maxWidth, lineHeight, { align });
+  }
+
+  // 表情对应的装饰 emoji
+  const exprEmojis = {
+    happy: ['😂','🤣','😆','😄','🥳','🎉','✨','💛'],
+    sad: ['😢','😭','💧','🥲','😿','💔','🌧️','😞'],
+    angry: ['😡','🤬','💢','🔥','💥','😤','👊','⚡'],
+    surprised: ['😱','🤯','😲','❗','⁉️','👀','💫','😮'],
+    neutral: ['😐','😑','🫠','💤','🗿','😶','🧊','🫥'],
+    fearful: ['😨','😰','😱','💀','👻','🫣','😬','🥶'],
+    disgusted: ['🤢','🤮','😒','🙄','💩','👎','😤','🫤']
+  };
+
+  // 在指定区域散布 emoji 装饰
+  function scatterEmojis(ctx, width, height, expression, count, avoidBoxes) {
+    const pool = exprEmojis[expression] || exprEmojis.neutral;
+    const fontSize = Math.max(16, Math.min(width / 20, 28));
+    ctx.font = `${fontSize}px sans-serif`;
+    for (let i = 0; i < count; i++) {
+      const ex = pool[(i * 7 + 3) % pool.length];
+      const px = ((i * 137 + 53) % 100) / 100 * width * 0.85 + width * 0.05;
+      const py = ((i * 89 + 17) % 100) / 100 * height * 0.3;
+      const fromBottom = i % 2 === 0;
+      const finalY = fromBottom ? height - py : py;
+      ctx.globalAlpha = 0.3 + (i % 3) * 0.15;
+      ctx.fillText(ex, px, finalY);
+    }
+    ctx.globalAlpha = 1.0;
+  }
+
+  // 为文案自动添加 emoji 后缀
+  function addEmojiToCaption(caption, expression, seed) {
+    const pool = exprEmojis[expression] || exprEmojis.neutral;
+    const e1 = pool[seed % pool.length];
+    const e2 = pool[(seed * 3 + 1) % pool.length];
+    // 如果文案已包含 emoji，不再追加
+    if (/[\u{1F300}-\u{1FAFF}]/u.test(caption.slice(-4))) return caption;
+    return `${caption} ${e1}${e2}`;
+  }
+
+  // 经典上下字 —— 渐变彩色大字 + emoji 装饰
+  function renderClassic(ctx, img, width, height, caption, faceBoxes, expression) {
     ctx.drawImage(img, 0, 0, width, height);
     const fontSize = Math.max(24, Math.min(width / 8, 52));
     const zone = findSafeZone(width, height, faceBoxes, 'bottom', fontSize * 2.2);
     const y = Math.min(zone.y, height - fontSize * 1.2);
+
+    // 半透明渐变背景条
+    const barH = fontSize * 2.4;
+    const grad = ctx.createLinearGradient(0, y - barH * 0.3, 0, y + barH * 0.7);
+    grad.addColorStop(0, 'rgba(0,0,0,0.0)');
+    grad.addColorStop(0.2, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.7)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y - barH * 0.3, width, barH);
+
+    // 彩色文字（黄→白渐变）
     ctx.font = `900 ${fontSize}px "Microsoft YaHei", "PingFang SC", sans-serif`;
-    drawWrappedText(ctx, caption, width / 2, y, width * 0.9, fontSize * 1.2);
+    const textGrad = ctx.createLinearGradient(width * 0.1, y, width * 0.9, y);
+    textGrad.addColorStop(0, '#ffe066');
+    textGrad.addColorStop(0.5, '#ffffff');
+    textGrad.addColorStop(1, '#ffe066');
+    drawText(ctx, caption, width / 2, y, width * 0.88, fontSize * 1.2, { fill: textGrad, stroke: '#000', lineWidth: 5 });
   }
 
-  // 沙雕吐槽对话框
-  function renderRoast(ctx, img, width, height, caption, faceBoxes) {
+  // 沙雕吐槽 —— 白底对话框 + 气泡尾巴 + emoji 点缀
+  function renderRoast(ctx, img, width, height, caption, faceBoxes, expression) {
     ctx.drawImage(img, 0, 0, width, height);
     const fontSize = Math.max(20, Math.min(width / 9, 42));
-    const bubbleW = width * 0.82;
-    const bubbleH = fontSize * 3.2;
-    const zone = findSafeZone(width, height, faceBoxes, 'top', bubbleH + 28);
+    const bubbleW = width * 0.84;
+    const bubbleH = fontSize * 3.5;
+    const zone = findSafeZone(width, height, faceBoxes, 'top', bubbleH + 30);
     const by = Math.max(zone.y - bubbleH / 2, height * 0.04);
     const bx = (width - bubbleW) / 2;
-    const triangleY = by + bubbleH;
 
+    // 带阴影的气泡
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 3;
-    roundRect(ctx, bx, by, bubbleW, bubbleH, 18);
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = '#fff';
+    roundRect(ctx, bx, by, bubbleW, bubbleH, 20);
     ctx.fill();
-    ctx.stroke();
-
-    // 小三角指向人脸方向
-    ctx.beginPath();
-    ctx.moveTo(width / 2 - 12, triangleY);
-    ctx.lineTo(width / 2, triangleY + 16);
-    ctx.lineTo(width / 2 + 12, triangleY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
     ctx.restore();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2.5;
+    roundRect(ctx, bx, by, bubbleW, bubbleH, 20);
+    ctx.stroke();
 
+    // 小三角
+    const triY = by + bubbleH;
+    ctx.beginPath();
+    ctx.moveTo(width / 2 - 14, triY);
+    ctx.lineTo(width / 2, triY + 18);
+    ctx.lineTo(width / 2 + 14, triY);
+    ctx.closePath();
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.stroke();
+
+    // 彩色文字
     ctx.font = `700 ${fontSize}px "Microsoft YaHei", sans-serif`;
-    drawWrappedText(ctx, caption, width / 2, by + bubbleH / 2, bubbleW - 24, fontSize * 1.25);
+    drawText(ctx, caption, width / 2, by + bubbleH / 2, bubbleW - 28, fontSize * 1.3, { fill: '#222', stroke: 'transparent', lineWidth: 0 });
+
+    // 角落 emoji
+    const pool = exprEmojis[expression] || exprEmojis.neutral;
+    ctx.font = `${fontSize * 0.8}px sans-serif`;
+    ctx.fillText(pool[0], bx + 6, by + 4);
+    ctx.fillText(pool[1], bx + bubbleW - fontSize, by + 4);
   }
 
-  // 震惊体大字报
-  function renderShock(ctx, img, width, height, caption, faceBoxes) {
+  // 震惊体 —— 倾斜大字 + 黄色感叹号 + emoji 炸裂
+  function renderShock(ctx, img, width, height, caption, faceBoxes, expression) {
     ctx.save();
     ctx.translate(width / 2, height / 2);
-    ctx.rotate((Math.random() - 0.5) * 0.04);
-    ctx.scale(1.08, 1.08);
+    ctx.rotate((Math.random() - 0.5) * 0.05);
+    ctx.scale(1.1, 1.1);
     ctx.drawImage(img, -width / 2, -height / 2, width, height);
     ctx.restore();
 
-    const fontSize = Math.max(28, Math.min(width / 6, 60));
-    const zone = findSafeZone(width, height, faceBoxes, 'auto', fontSize * 2.6);
+    const fontSize = Math.max(30, Math.min(width / 5.5, 64));
+    const zone = findSafeZone(width, height, faceBoxes, 'auto', fontSize * 2.8);
     const y = Math.max(fontSize, Math.min(zone.y, height - fontSize));
 
+    // 红色发光效果
     ctx.save();
     ctx.translate(width / 2, y);
-    ctx.rotate(zone.position === 'bottom' ? 0.04 : -0.04);
+    ctx.rotate(zone.position === 'bottom' ? 0.05 : -0.05);
     ctx.font = `900 ${fontSize}px "Microsoft YaHei", Impact, sans-serif`;
-    drawWrappedText(ctx, caption, 0, 0, width * 0.85, fontSize * 1.15);
+    ctx.shadowColor = '#ff0000';
+    ctx.shadowBlur = 20;
+    drawText(ctx, caption, 0, 0, width * 0.85, fontSize * 1.15, { fill: '#fff', stroke: '#e94560', lineWidth: 6 });
     ctx.restore();
 
-    // 感叹号
-    ctx.font = `700 ${fontSize * 1.2}px sans-serif`;
+    // 大号感叹号和 emoji
+    const markY = zone.position === 'bottom' ? height * 0.15 : height * 0.88;
+    ctx.font = `900 ${fontSize * 1.3}px sans-serif`;
     ctx.fillStyle = '#ffeb3b';
     ctx.strokeStyle = '#e94560';
-    ctx.lineWidth = 3;
-    const markY = zone.position === 'bottom' ? height * 0.18 : height * 0.88;
-    ctx.strokeText('!!!', width * 0.85, markY);
-    ctx.fillText('!!!', width * 0.85, markY);
+    ctx.lineWidth = 4;
+    ctx.strokeText('‼️', width * 0.82, markY);
+    ctx.fillText('‼️', width * 0.82, markY);
+    const pool = exprEmojis[expression] || exprEmojis.surprised;
+    ctx.font = `${fontSize * 0.7}px sans-serif`;
+    ctx.fillText(pool[2], width * 0.05, markY);
   }
 
-  // 社死现场
-  function renderSocialDeath(ctx, img, width, height, caption, faceBoxes) {
+  // 社死现场 —— 暗角 + 对角线文字 + emoji 散布
+  function renderSocialDeath(ctx, img, width, height, caption, faceBoxes, expression) {
     ctx.drawImage(img, 0, 0, width, height);
 
-    // 暗角
-    const grad = ctx.createRadialGradient(width / 2, height / 2, width * 0.3, width / 2, height / 2, width * 0.8);
+    // 强暗角
+    const grad = ctx.createRadialGradient(width / 2, height / 2, width * 0.25, width / 2, height / 2, width * 0.85);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.65)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
 
@@ -481,85 +551,112 @@ const MemeEngine = (() => {
     const zone = findSafeZone(width, height, faceBoxes, 'auto', fontSize * 2.4);
     const y = Math.max(fontSize, Math.min(zone.y, height - fontSize));
 
-    ctx.font = `900 ${fontSize}px "Microsoft YaHei", sans-serif`;
-    drawWrappedText(ctx, caption, width / 2, y, width * 0.88, fontSize * 1.2);
-
-    ctx.font = '24px sans-serif';
-    const skullY = zone.position === 'bottom' ? height * 0.12 : height * 0.9;
-    ctx.fillText('💀', width * 0.88, skullY);
-  }
-
-  // 阴阳怪气
-  function renderPassive(ctx, img, width, height, caption, faceBoxes) {
-    ctx.drawImage(img, 0, 0, width, height);
-    const fontSize = Math.max(22, Math.min(width / 8, 42));
-    const barH = fontSize * 2.4;
-    const zone = findSafeZone(width, height, faceBoxes, 'bottom', barH + 16);
-    const barY = Math.min(zone.y + barH / 2, height - barH / 2);
-
-    ctx.font = `700 ${fontSize}px "Microsoft YaHei", sans-serif`;
-
-    // 黑条
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.fillRect(0, barY - barH / 2, width, barH);
-
-    drawWrappedText(ctx, caption, width / 2, barY, width * 0.92, fontSize * 1.15);
-
-    // 角落 emoji
-    ctx.font = '30px sans-serif';
-    ctx.fillText('🙃', width * 0.05, height * 0.1);
-    ctx.fillText('🍵', width * 0.88, height * 0.9);
-  }
-
-  // 电影字幕
-  function renderSubtitle(ctx, img, width, height, caption, faceBoxes) {
-    ctx.drawImage(img, 0, 0, width, height);
-
-    const fontSize = Math.max(20, Math.min(width / 10, 36));
-    const barH = fontSize * 2.4;
-    const zone = findSafeZone(width, height, faceBoxes, 'bottom', barH + 16);
-    const barY = Math.min(zone.y + barH / 2, height - barH / 2);
-
-    // 电影黑边
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(0, barY - barH / 2, width, barH);
-
-    // 小黄字
-    ctx.font = `700 ${fontSize}px "Microsoft YaHei", sans-serif`;
-    drawWrappedText(ctx, caption, width / 2, barY, width * 0.9, fontSize * 1.15);
-
-    // 电影角标
-    ctx.font = '18px sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.fillText('🎬 自制热梗', width * 0.05, height * 0.06);
-  }
-
-  // 可爱治愈
-  function renderWholesome(ctx, img, width, height, caption, faceBoxes) {
+    // 倾斜文字 + 紫色描边
     ctx.save();
-    ctx.fillStyle = '#fff0f5';
-    ctx.fillRect(0, 0, width, height);
+    ctx.translate(width / 2, y);
+    ctx.rotate(-0.06);
+    ctx.font = `900 ${fontSize}px "Microsoft YaHei", sans-serif`;
+    drawText(ctx, caption, 0, 0, width * 0.88, fontSize * 1.2, { fill: '#f0f0f0', stroke: '#6c2d82', lineWidth: 5 });
     ctx.restore();
 
+    // 💀 装饰
+    ctx.font = `${fontSize * 0.9}px sans-serif`;
+    const skullY = zone.position === 'bottom' ? height * 0.1 : height * 0.92;
+    ctx.fillText('💀', width * 0.08, skullY);
+    ctx.fillText('💀', width * 0.82, skullY);
+    ctx.fillText('😭', width * 0.45, skullY + fontSize * 0.3);
+  }
+
+  // 阴阳怪气 —— 倾斜黑条 + 彩色反讽文字 + 角落 emoji
+  function renderPassive(ctx, img, width, height, caption, faceBoxes, expression) {
+    ctx.drawImage(img, 0, 0, width, height);
+    const fontSize = Math.max(22, Math.min(width / 8, 42));
+    const barH = fontSize * 2.6;
+    const zone = findSafeZone(width, height, faceBoxes, 'bottom', barH + 16);
+    const barY = Math.min(zone.y + barH / 2, height - barH / 2);
+
+    // 稍微倾斜的黑条
+    ctx.save();
+    ctx.translate(width / 2, barY);
+    ctx.rotate(-0.03);
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(-width / 2 - 10, -barH / 2, width + 20, barH);
+    // 彩色文字（淡绿色反讽感）
+    ctx.font = `700 ${fontSize}px "Microsoft YaHei", sans-serif`;
+    drawText(ctx, caption, 0, 0, width * 0.9, fontSize * 1.15, { fill: '#a8e6cf', stroke: '#000', lineWidth: 3 });
+    ctx.restore();
+
+    // 角落 emoji 组合
+    ctx.font = `${fontSize * 0.8}px sans-serif`;
+    ctx.fillText('🙃', width * 0.03, height * 0.08);
+    ctx.fillText('🍵', width * 0.88, height * 0.08);
+    ctx.fillText('🫠', width * 0.03, height * 0.92);
+    ctx.fillText('💅', width * 0.88, height * 0.92);
+  }
+
+  // 电影字幕 —— 电影黑边 + 彩色宽屏文字 + 上下双 emoji
+  function renderSubtitle(ctx, img, width, height, caption, faceBoxes, expression) {
+    ctx.drawImage(img, 0, 0, width, height);
+    const fontSize = Math.max(20, Math.min(width / 10, 36));
+    const barH = fontSize * 2.6;
+    const zone = findSafeZone(width, height, faceBoxes, 'bottom', barH + 16);
+    const barY = Math.min(zone.y + barH / 2, height - barH / 2);
+
+    // 电影黑边（上下）
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, barY - barH / 2, width, barH);
+    // 顶部窄黑边（电影感）
+    ctx.fillRect(0, 0, width, height * 0.05);
+
+    // 小黄字 + 更亮的描边
+    ctx.font = `700 ${fontSize}px "Microsoft YaHei", sans-serif`;
+    const textGrad = ctx.createLinearGradient(width * 0.1, barY, width * 0.9, barY);
+    textGrad.addColorStop(0, '#ffe066');
+    textGrad.addColorStop(0.5, '#ffd700');
+    textGrad.addColorStop(1, '#ffe066');
+    drawText(ctx, caption, width / 2, barY, width * 0.88, fontSize * 1.15, { fill: textGrad, stroke: '#333', lineWidth: 2 });
+
+    // 电影角标 + emoji
+    const pool = exprEmojis[expression] || exprEmojis.neutral;
+    ctx.font = `${fontSize * 0.6}px sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.textAlign = 'left';
+    ctx.fillText(`🎬 自制热梗  ${pool[0]}`, width * 0.04, height * 0.035);
+    ctx.textAlign = 'right';
+    ctx.fillText(pool[1], width * 0.96, height * 0.035);
+    ctx.textAlign = 'center';
+  }
+
+  // 可爱治愈 —— 柔和渐变底 + 彩色文字 + emoji 环绕
+  function renderWholesome(ctx, img, width, height, caption, faceBoxes, expression) {
     const fontSize = Math.max(20, Math.min(width / 9, 38));
-    const barH = Math.max(height * 0.22, fontSize * 2.4);
+    const barH = Math.max(height * 0.24, fontSize * 2.6);
     const zone = findSafeZone(width, height, faceBoxes, 'bottom', barH);
     const barY = Math.min(zone.y + barH / 2, height - barH / 2);
     const imgH = barY - barH / 2;
 
     ctx.drawImage(img, 0, 0, width, imgH);
 
-    // 粉色底
-    ctx.fillStyle = '#ffcce0';
+    // 柔和粉紫渐变底
+    const grad = ctx.createLinearGradient(0, imgH, 0, height);
+    grad.addColorStop(0, '#ffd1dc');
+    grad.addColorStop(0.5, '#e8c5f0');
+    grad.addColorStop(1, '#c5b3f0');
+    ctx.fillStyle = grad;
     ctx.fillRect(0, imgH, width, height - imgH);
 
+    // 彩色文字
     ctx.font = `700 ${fontSize}px "Microsoft YaHei", sans-serif`;
-    drawWrappedText(ctx, caption, width / 2, imgH + (height - imgH) / 2, width * 0.9, fontSize * 1.2);
+    drawText(ctx, caption, width / 2, imgH + (height - imgH) / 2, width * 0.88, fontSize * 1.25, { fill: '#5b2c6f', stroke: '#fff', lineWidth: 3 });
 
-    // 小爱心
-    ctx.font = '24px sans-serif';
-    ctx.fillText('💖', width * 0.05, height * 0.08);
-    ctx.fillText('✨', width * 0.88, height * 0.08);
+    // emoji 装饰散布
+    const pool = exprEmojis[expression] || exprEmojis.happy;
+    ctx.font = `${fontSize * 0.75}px sans-serif`;
+    ctx.fillText('💖', width * 0.04, height * 0.06);
+    ctx.fillText('✨', width * 0.86, height * 0.06);
+    ctx.fillText(pool[0], width * 0.04, imgH + 6);
+    ctx.fillText(pool[1], width * 0.86, imgH + 6);
+    ctx.fillText('🌸', width * 0.45, height * 0.04);
   }
 
   // 根据人脸位置计算安全的文字区域
@@ -631,34 +728,19 @@ const MemeEngine = (() => {
     ctx.closePath();
   }
 
-  function renderFrame(ctx, renderer, img, width, height, caption, frameIndex, totalFrames, faceBoxes) {
+  function renderFrame(ctx, renderer, img, width, height, caption, frameIndex, totalFrames, faceBoxes, expression) {
     const t = frameIndex / Math.max(1, totalFrames - 1);
     ctx.clearRect(0, 0, width, height);
 
     switch (renderer) {
-      case 'classic':
-        renderClassic(ctx, img, width, height, caption, faceBoxes);
-        break;
-      case 'roast':
-        renderRoast(ctx, img, width, height, caption, faceBoxes);
-        break;
-      case 'shock':
-        renderShock(ctx, img, width, height, caption, faceBoxes);
-        break;
-      case 'socialdeath':
-        renderSocialDeath(ctx, img, width, height, caption, faceBoxes);
-        break;
-      case 'passive':
-        renderPassive(ctx, img, width, height, caption, faceBoxes);
-        break;
-      case 'wholesome':
-        renderWholesome(ctx, img, width, height, caption, faceBoxes);
-        break;
-      case 'subtitle':
-        renderSubtitle(ctx, img, width, height, caption, faceBoxes);
-        break;
-      default:
-        renderClassic(ctx, img, width, height, caption, faceBoxes);
+      case 'classic': renderClassic(ctx, img, width, height, caption, faceBoxes, expression); break;
+      case 'roast': renderRoast(ctx, img, width, height, caption, faceBoxes, expression); break;
+      case 'shock': renderShock(ctx, img, width, height, caption, faceBoxes, expression); break;
+      case 'socialdeath': renderSocialDeath(ctx, img, width, height, caption, faceBoxes, expression); break;
+      case 'passive': renderPassive(ctx, img, width, height, caption, faceBoxes, expression); break;
+      case 'wholesome': renderWholesome(ctx, img, width, height, caption, faceBoxes, expression); break;
+      case 'subtitle': renderSubtitle(ctx, img, width, height, caption, faceBoxes, expression); break;
+      default: renderClassic(ctx, img, width, height, caption, faceBoxes, expression);
     }
 
     // 动态效果叠加
@@ -712,9 +794,9 @@ const MemeEngine = (() => {
     canvas.height = size.height;
     const ctx = canvas.getContext('2d');
 
-    const caption = customCaption || getCaption(expression, style.id, seed, hotTopics);
+    const caption = addEmojiToCaption(customCaption || getCaption(expression, style.id, seed, hotTopics), expression, seed);
     const scaledBoxes = scaleFaceBoxes(faceBoxes, sourceImg.naturalWidth, sourceImg.naturalHeight, size.width, size.height);
-    renderFrame(ctx, style.renderer, sourceImg, size.width, size.height, caption, 0, 1, scaledBoxes);
+    renderFrame(ctx, style.renderer, sourceImg, size.width, size.height, caption, 0, 1, scaledBoxes, expression);
 
     return {
       dataUrl: canvas.toDataURL('image/png'),
@@ -741,7 +823,7 @@ const MemeEngine = (() => {
       }
 
       const size = fitSize(sourceImg.naturalWidth, sourceImg.naturalHeight, 480);
-      const caption = customCaption || getCaption(expression, style.id, seed + 1, hotTopics);
+      const caption = addEmojiToCaption(customCaption || getCaption(expression, style.id, seed + 1, hotTopics), expression, seed);
       const scaledBoxes = scaleFaceBoxes(faceBoxes, sourceImg.naturalWidth, sourceImg.naturalHeight, size.width, size.height);
       const totalFrames = 12;
       const gif = new GIF({
@@ -767,7 +849,7 @@ const MemeEngine = (() => {
       gif.on('error', reject);
 
       for (let i = 0; i < totalFrames; i++) {
-        renderFrame(ctx, style.renderer, sourceImg, size.width, size.height, caption, i, totalFrames, scaledBoxes);
+        renderFrame(ctx, style.renderer, sourceImg, size.width, size.height, caption, i, totalFrames, scaledBoxes, expression);
         gif.addFrame(ctx, { copy: true, delay: 120 });
       }
 
