@@ -239,7 +239,20 @@ const MemeEngine = (() => {
   const DEFAULT_HOT_TOPICS_URL = './hot-topics.json';
   let hotTopicsList = [];
 
-  function getCaption(expression, styleId, seed = 0, hotTopics = []) {
+  function getCaption(expression, styleId, seed = 0, hotTopics = [], expressionLabel = '') {
+    // 表情描述词库，用于热梗融合时让文案更贴合图像表情
+    const expressionDescMap = {
+      happy: ['笑脸', '傻笑', '美滋滋', '笑容减不住', '嘴角落不下来', '笑得像个傻子', '开心到飞起'],
+      sad: ['苦脸', '泪流满面', '委屈巴巴', '眼泪汪汪', '愁眉苦脸', '泪崩', '悲伤溢出屏幕'],
+      angry: ['怒容', '气到变形', '火冒三丈', '青筋暴起', '咬牙忍忍忍', '暴怒模式', '眼神杀'],
+      surprised: ['懵圈脸', '目瞪口哣', '惊呆下巴', '眼神地震', '瞳孔放大', '一脸懵通', '惊讶到模糊'],
+      neutral: ['面瘫脸', '平静如水', '波澜不惊', '毫无波澜', '佛系表情', '淡定到发光', '面无表情'],
+      fearful: ['惊恐脸', '吓得模糊', '瑟瑟发抖', '脸色发白', '眼神惊恐', '怂到不行', '吓到失语'],
+      disgusted: ['嫌弃脸', '眉头紧锁', '眼神嫌弃', '一脸厌恶', '受不了', '表情崩塔', '嫌弃拉满']
+    };
+    const expressionDescs = expressionDescMap[expression] || expressionDescMap.neutral;
+    const desc = expressionDescs[Math.abs(seed * 13) % expressionDescs.length];
+
     // 如果有热梗可用，有一定概率融合热梗生成新文案
     if (hotTopics && hotTopics.length > 0 && seed % 3 !== 0) {
       const topic = hotTopics[Math.abs(seed * 31) % hotTopics.length];
@@ -247,9 +260,15 @@ const MemeEngine = (() => {
       const reaction = reactionList[Math.abs(seed * 17) % reactionList.length];
       const templates = hotTopicTemplates[styleId] || hotTopicTemplates.classic;
       const template = templates[Math.abs(seed * 7) % templates.length];
-      return template.replace('{topic}', topic).replace('{reaction}', reaction);
+      let result = template.replace('{topic}', topic).replace('{reaction}', reaction);
+      // 50% 概率加入表情描述词，让文案更贴合图像
+      if (seed % 2 === 0) {
+        result = `${result}（${desc}）`;
+      }
+      return result;
     }
 
+    // 没有热梗时，优先使用表情专属文案库
     const list = (captions[expression] && captions[expression][styleId])
       || fallback[styleId]
       || fallback.classic;

@@ -33,6 +33,16 @@
       <p class="subtitle">上传带人脸的照片或视频，AI 自动识别表情并生成网络热门表情包</p>
     </header>
 
+    <!-- 最近生成展示区 -->
+    <section class="showcase-section" id="showcaseSection">
+      <div class="showcase-header">
+        <span class="showcase-badge">🔥 实时</span>
+        <span>大家都在玩</span>
+        <span class="showcase-count" id="showcaseCount">已生成 0 张</span>
+      </div>
+      <div class="showcase-scroll" id="showcaseScroll"></div>
+    </section>
+
     <main class="main">
       <!-- 上传区域 -->
       <section class="card upload-card" id="uploadSection">
@@ -50,17 +60,6 @@
         </div>
         <video id="cameraPreview" autoplay playsinline muted hidden></video>
         <canvas id="captureCanvas" hidden></canvas>
-      </section>
-
-      <!-- 热梗源设置 -->
-      <section class="card hot-topics-card" id="hotTopicsSection">
-        <h2>🔥 网络热梗库（每日自动更新）</h2>
-        <p class="hot-topics-hint">输入热梗 JSON 源地址，生成时会自动融入表情包文案。留空则使用默认热梗库。</p>
-        <div class="hot-topics-row">
-          <input type="text" id="hotTopicsUrl" placeholder="https://your-cdn.com/hot-topics.json">
-          <button class="btn btn-secondary" id="refreshHotTopicsBtn">🔄 刷新</button>
-        </div>
-        <p class="hot-topics-status" id="hotTopicsStatus">正在拉取热梗…</p>
       </section>
 
       <!-- 预览与识别状态 -->
@@ -84,7 +83,7 @@
 
       <!-- 生成选项 -->
       <section class="card options-card hidden" id="optionsSection">
-        <h2>🎨 生成选项 <span class="options-tip">（点击风格并编辑文案后合成）</span></h2>
+        <h2>🎨 选择风格</h2>
         <div class="style-grid" id="styleGrid"></div>
         <div class="caption-edit hidden" id="captionEdit">
           <label for="captionInput">✏️ 表情包文案（可修改）</label>

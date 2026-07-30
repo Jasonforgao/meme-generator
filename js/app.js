@@ -38,10 +38,9 @@
     regenerateBtn: document.getElementById('regenerateBtn'),
     backBtn: document.getElementById('backBtn'),
     resultTabs: document.querySelectorAll('.tab-btn'),
-    hotTopicsSection: document.getElementById('hotTopicsSection'),
-    hotTopicsUrl: document.getElementById('hotTopicsUrl'),
-    hotTopicsStatus: document.getElementById('hotTopicsStatus'),
-    refreshHotTopicsBtn: document.getElementById('refreshHotTopicsBtn')
+    showcaseSection: document.getElementById('showcaseSection'),
+    showcaseScroll: document.getElementById('showcaseScroll'),
+    showcaseCount: document.getElementById('showcaseCount')
   };
 
   // 状态
@@ -59,13 +58,14 @@
     animatedResult: null,
     seed: 0,
     isGenerating: false,
-    hotTopicsUrl: localStorage.getItem('hot_topics_url') || './hot-topics.json'
+    totalCount: parseInt(localStorage.getItem('meme_total_count') || '0', 10)
   };
 
   // 初始化
   async function init() {
     bindEvents();
     renderStyleOptions();
+    renderShowcase();
 
     // 检查是否由 Web Share Target 进入
     checkSharedFile();
@@ -80,8 +80,8 @@
       showError('AI 模型加载失败：' + (err.message || '未知错误'));
     }
 
-    // 初始化热梗设置并拉取
-    initHotTopics();
+    // 静默拉取热梗
+    loadHotTopicsSilently();
   }
 
   // 处理从安卓相册等应用分享过来的文件
@@ -124,53 +124,12 @@
     });
   }
 
-  // 热梗设置初始化与拉取
-  function initHotTopics() {
-    if (els.hotTopicsUrl) {
-      els.hotTopicsUrl.value = state.hotTopicsUrl;
-    }
-    refreshHotTopics();
-    if (els.refreshHotTopicsBtn) {
-      els.refreshHotTopicsBtn.addEventListener('click', async () => {
-        if (els.hotTopicsUrl) {
-          state.hotTopicsUrl = els.hotTopicsUrl.value.trim() || './hot-topics.json';
-          localStorage.setItem('hot_topics_url', state.hotTopicsUrl);
-        }
-        // 清除本地缓存强制拉取
-        localStorage.removeItem(`hot_topics_cache_${state.hotTopicsUrl}`);
-        localStorage.removeItem(`hot_topics_time_${state.hotTopicsUrl}`);
-        await refreshHotTopics();
-      });
-    }
-  }
-
-  async function refreshHotTopics() {
-    if (els.hotTopicsStatus) {
-      els.hotTopicsStatus.textContent = '正在拉取热梗…';
-      els.hotTopicsStatus.classList.remove('success', 'error');
-    }
+  // 静默拉取热梗，不显示任何 UI
+  async function loadHotTopicsSilently() {
     try {
-      const result = await MemeEngine.loadHotTopics(state.hotTopicsUrl, 60 * 24); // 缓存 1 天
-      if (result.success) {
-        if (els.hotTopicsStatus) {
-          els.hotTopicsStatus.textContent = `✓ 已加载 ${result.topics.length} 条热梗${result.fromCache ? '（本地缓存）' : ''}`;
-          els.hotTopicsStatus.classList.add('success');
-          els.hotTopicsStatus.classList.remove('error');
-        }
-      } else {
-        if (els.hotTopicsStatus) {
-          els.hotTopicsStatus.textContent = `✗ 拉取失败（${result.error || '未知'}），使用本地文案`;
-          els.hotTopicsStatus.classList.add('error');
-          els.hotTopicsStatus.classList.remove('success');
-        }
-      }
+      await MemeEngine.loadHotTopics('./hot-topics.json', 60 * 24); // 缓存 1 天
     } catch (err) {
-      console.error(err);
-      if (els.hotTopicsStatus) {
-        els.hotTopicsStatus.textContent = `✗ 拉取异常：${err.message}`;
-        els.hotTopicsStatus.classList.add('error');
-        els.hotTopicsStatus.classList.remove('success');
-      }
+      console.warn('热梗加载失败:', err);
     }
   }
 
@@ -212,7 +171,7 @@
     // 文案编辑
     els.autoCaptionBtn.addEventListener('click', () => {
       state.seed++;
-      const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed, MemeEngine.getHotTopics());
+      const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed, MemeEngine.getHotTopics(), state.expressionLabel);
       els.captionInput.value = suggested;
       state.customCaption = suggested;
     });
@@ -230,7 +189,7 @@
       state.seed++;
       // 如果用户没手动改文案，继续用 AI 推荐；否则保留当前文案
       if (!state.customCaption) {
-        const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed, MemeEngine.getHotTopics());
+        const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle?.id, state.seed, MemeEngine.getHotTopics(), state.expressionLabel);
         els.captionInput.value = suggested;
       }
       generateForSelectedStyle();
@@ -258,7 +217,7 @@
         showSection(els.captionEdit);
 
         // 生成推荐文案并填入编辑框
-        const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle.id, state.seed, MemeEngine.getHotTopics());
+        const suggested = MemeEngine.getCaption(state.expression, state.selectedStyle.id, state.seed, MemeEngine.getHotTopics(), state.expressionLabel);
         els.captionInput.value = suggested;
         state.customCaption = '';
 
@@ -472,6 +431,9 @@
       showResult();
       updateStatus('生成完成', false);
       els.resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // 保存到展示区
+      saveToShowcase(state.staticResult, state.selectedStyle, state.expressionLabel);
     } catch (err) {
       console.error(err);
       updateStatus('生成失败', false);
@@ -593,6 +555,80 @@
       };
       video.addEventListener('seeked', handler);
     });
+  }
+
+  // 展示区：保存和渲染
+  const SHOWCASE_KEY = 'meme_showcase';
+  const MAX_SHOWCASE = 20;
+
+  function saveToShowcase(result, style, expressionLabel) {
+    if (!result || !result.dataUrl) return;
+
+    // 生成缩略图（异步）
+    createThumbnail(result.dataUrl, 200).then(thumbDataUrl => {
+      // 保存到 localStorage
+      let items = [];
+      try { items = JSON.parse(localStorage.getItem(SHOWCASE_KEY) || '[]'); } catch (e) {}
+      items.unshift({
+        thumb: thumbDataUrl,
+        caption: result.caption || '',
+        style: style?.name || '',
+        expression: expressionLabel || '',
+        time: Date.now()
+      });
+      if (items.length > MAX_SHOWCASE) items = items.slice(0, MAX_SHOWCASE);
+      try { localStorage.setItem(SHOWCASE_KEY, JSON.stringify(items)); } catch (e) { /* quota */ }
+
+      // 更新计数
+      state.totalCount++;
+      localStorage.setItem('meme_total_count', String(state.totalCount));
+
+      // 重新渲染展示区
+      renderShowcase();
+    });
+  }
+
+  function createThumbnail(dataUrl, maxSize) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = maxSize;
+        canvas.height = maxSize;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, maxSize, maxSize);
+        resolve(canvas.toDataURL('image/jpeg', 0.6));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  function renderShowcase() {
+    let items = [];
+    try { items = JSON.parse(localStorage.getItem(SHOWCASE_KEY) || '[]'); } catch (e) {}
+
+    // 加上基础数量（模拟全局热度）
+    const baseCount = 1247;
+    const displayCount = baseCount + state.totalCount;
+    if (els.showcaseCount) {
+      els.showcaseCount.textContent = `已生成 ${displayCount.toLocaleString()} 张`;
+    }
+
+    if (!els.showcaseScroll) return;
+
+    if (items.length === 0) {
+      // 无数据时显示提示
+      els.showcaseScroll.innerHTML = '<div class="showcase-empty">生成表情包后会展示在这里 ✨</div>';
+      return;
+    }
+
+    els.showcaseScroll.innerHTML = items.map(item => `
+      <div class="showcase-item">
+        <img src="${item.thumb}" alt="${item.caption}" loading="lazy">
+        <div class="showcase-caption">${item.caption}</div>
+      </div>
+    `).join('');
   }
 
   // 启动
