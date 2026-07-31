@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1a1a2e">
+  <meta name="theme-color" content="#f0eeeb">
   <title>糕糕表情生成器 - 自制表情包神器</title>
   <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="css/style.css">
   <script>
@@ -32,14 +32,14 @@
 <body>
   <div class="app">
     <header class="header">
-      <h1>🎭 糕糕表情生成器</h1>
-      <p class="subtitle">上传带人脸的照片或视频，AI 自动识别表情并生成网络热门表情包</p>
+      <h1>糕糕表情生成器</h1>
+      <p class="subtitle">上传带人脸的照片，AI 识别表情自动生成表情包</p>
     </header>
 
     <!-- 最近生成展示区 -->
     <section class="showcase-section" id="showcaseSection">
       <div class="showcase-header">
-        <span class="showcase-badge">🔥 实时</span>
+        <span class="showcase-badge">实时 ·</span>
         <span>大家都在玩</span>
         <span class="showcase-count" id="showcaseCount">已生成 0 张</span>
       </div>
@@ -51,9 +51,9 @@
       <div class="upload-zone" id="dropZone">
         <input type="file" id="fileInput" accept="image/*,video/*,image/png,image/jpeg,image/jpg,image/gif,image/webp,video/mp4,video/quicktime,video/webm" hidden>
         <div class="upload-hint">
-          <div class="upload-icon">📸</div>
-          <p>点击选择或拖拽图片/视频到此处</p>
-          <p class="upload-sub">支持 JPG、PNG、GIF、MP4、MOV 等格式</p>
+          <div class="upload-icon">🖼️</div>
+          <p>点击选择或拖拽图片 / 视频</p>
+          <p class="upload-sub">支持 JPG · PNG · GIF · MP4 · MOV</p>
         </div>
       </div>
       <div class="upload-actions">
@@ -80,17 +80,17 @@
     <main class="main">
       <!-- 步骤进度条 -->
       <div class="wizard-progress" id="wizardProgress">
-        <span class="wp-step active" data-step="1">❶ 识别</span>
-        <span class="wp-arrow">›</span>
-        <span class="wp-step" data-step="2">❷ 编辑</span>
-        <span class="wp-arrow">›</span>
-        <span class="wp-step" data-step="3">❸ 完成</span>
+        <span class="wp-step active" data-step="1">识别</span>
+        <span class="wp-arrow">—</span>
+        <span class="wp-step" data-step="2">编辑</span>
+        <span class="wp-arrow">—</span>
+        <span class="wp-step" data-step="3">完成</span>
       </div>
 
       <!-- 步骤 1：预览与检测 -->
       <div class="wizard-step" id="wizardStep1" hidden>
         <section class="card preview-card">
-          <h2>📤 素材预览</h2>
+          <h2>素材预览</h2>
           <div class="preview-wrap">
             <img id="sourceImage" alt="源素材" hidden>
             <video id="sourceVideo" controls playsinline hidden></video>
@@ -117,15 +117,15 @@
         <section class="card options-card">
           <div class="step-header">
             <button class="btn-back-icon" id="backToDetectBtn">←</button>
-            <h2>🎨 选择风格</h2>
+            <h2>选择风格</h2>
           </div>
           <div class="style-grid" id="styleGrid"></div>
           <div class="caption-edit hidden" id="captionEdit">
-            <label for="captionInput">✏️ 表情包文案（可修改）</label>
+            <label for="captionInput">文案（可自由修改）</label>
             <textarea id="captionInput" rows="2" placeholder="AI 推荐文案会显示在这里，你可以自由修改..."></textarea>
             <div class="caption-actions">
-              <button class="btn btn-secondary" id="autoCaptionBtn">🎲 换一句</button>
-              <button class="btn btn-primary" id="generateBtn">✨ 生成表情包</button>
+              <button class="btn btn-secondary" id="autoCaptionBtn">换一句</button>
+              <button class="btn btn-primary" id="generateBtn">生成表情包</button>
             </div>
           </div>
         </section>
@@ -136,7 +136,7 @@
         <section class="card result-card">
           <div class="step-header">
             <button class="btn-back-icon" id="backToEditBtn">←</button>
-            <h2>✨ 生成结果</h2>
+            <h2>生成结果</h2>
           </div>
           <div class="result-tabs">
             <button class="tab-btn active" data-type="static">静态图</button>
@@ -151,8 +151,8 @@
             </div>
           </div>
           <div class="result-actions">
-            <button class="btn btn-primary" id="downloadBtn">💾 保存到本地</button>
-            <button class="btn btn-secondary" id="regenerateBtn">🔄 换一换</button>
+            <button class="btn btn-primary" id="downloadBtn">保存图片</button>
+            <button class="btn btn-secondary" id="regenerateBtn">换一换</button>
           </div>
           <div class="step-actions">
             <button class="btn btn-ghost" id="backBtn">← 重新上传</button>
