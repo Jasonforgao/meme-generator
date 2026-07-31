@@ -12,6 +12,10 @@
     cameraBtn: document.getElementById('cameraBtn'),
     cameraPreview: document.getElementById('cameraPreview'),
     captureCanvas: document.getElementById('captureCanvas'),
+    cameraOverlay: document.getElementById('cameraOverlay'),
+    cameraOverlayVideo: document.getElementById('cameraOverlayVideo'),
+    cameraShutterBtn: document.getElementById('cameraShutterBtn'),
+    cancelCameraBtn: document.getElementById('cancelCameraBtn'),
     uploadSection: document.getElementById('uploadSection'),
     sourceImage: document.getElementById('sourceImage'),
     sourceVideo: document.getElementById('sourceVideo'),
@@ -175,7 +179,9 @@
     });
 
     // 拍照
-    els.cameraBtn.addEventListener('click', toggleCamera);
+    els.cameraBtn.addEventListener('click', openCameraOverlay);
+    els.cameraShutterBtn.addEventListener('click', captureFromCamera);
+    els.cancelCameraBtn.addEventListener('click', closeCameraOverlay);
 
     // 向导导航按钮
     els.backToUploadBtn.addEventListener('click', () => goToStep(0));
@@ -348,48 +354,45 @@
     }
   }
 
-  // 相机拍照
+  // 相机拍照（全屏覆盖层）
   let cameraStream = null;
-  let isCameraMode = false;
-  async function toggleCamera() {
-    if (isCameraMode && cameraStream) {
-      // 拍照
-      const video = els.cameraPreview;
-      const canvas = els.captureCanvas;
-      canvas.width = video.videoWidth || video.clientWidth;
-      canvas.height = video.videoHeight || video.clientHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob((blob) => {
-        const file = new File([blob], 'camera-shot.jpg', { type: 'image/jpeg' });
-        handleFile(file);
-      }, 'image/jpeg', 0.92);
-      stopCamera();
-      return;
-    }
-
+  async function openCameraOverlay() {
     try {
       cameraStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user' },
         audio: false
       });
-      els.cameraPreview.srcObject = cameraStream;
-      els.cameraPreview.hidden = false;
-      els.cameraBtn.textContent = '📸 点击拍照';
-      isCameraMode = true;
+      els.cameraOverlayVideo.srcObject = cameraStream;
+      els.cameraOverlay.hidden = false;
+      document.body.style.overflow = 'hidden';
     } catch (err) {
       showError('无法调用摄像头：' + (err.message || '请检查权限'));
     }
   }
 
-  function stopCamera() {
+  function closeCameraOverlay() {
     if (cameraStream) {
       cameraStream.getTracks().forEach(t => t.stop());
       cameraStream = null;
     }
-    els.cameraPreview.hidden = true;
-    els.cameraBtn.textContent = '📷 拍照';
-    isCameraMode = false;
+    els.cameraOverlayVideo.srcObject = null;
+    els.cameraOverlay.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  function captureFromCamera() {
+    if (!cameraStream) return;
+    const video = els.cameraOverlayVideo;
+    const canvas = els.captureCanvas;
+    canvas.width = video.videoWidth || video.clientWidth;
+    canvas.height = video.videoHeight || video.clientHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      closeCameraOverlay();
+      const file = new File([blob], 'camera-shot.jpg', { type: 'image/jpeg' });
+      handleFile(file);
+    }, 'image/jpeg', 0.92);
   }
 
   // 检测人脸并渲染（检测失败不阻塞流程）
@@ -546,9 +549,22 @@
     if (!dataUrl) return;
 
     const ext = state.resultType === 'static' ? 'png' : 'gif';
+    const filename = `表情包_${state.selectedStyle?.name}_${Date.now()}.${ext}`;
+
+    // 安卓 WebView 桥接：调用原生保存到相册
+    if (typeof window.Android !== 'undefined' && window.Android.saveImage) {
+      try {
+        window.Android.saveImage(dataUrl, filename);
+        return;
+      } catch (e) {
+        console.warn('Android 保存桥接失败，降级使用浏览器下载:', e);
+      }
+    }
+
+    // 浏览器 / iOS 默认下载方式
     const link = document.createElement('a');
     link.href = dataUrl;
-    link.download = `表情包_${state.selectedStyle?.name}_${Date.now()}.${ext}`;
+    link.download = filename;
     link.click();
   }
 

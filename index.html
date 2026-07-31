@@ -64,6 +64,19 @@
       <canvas id="captureCanvas" hidden></canvas>
     </section>
 
+    <!-- 全屏拍照覆盖层 -->
+    <div class="camera-overlay" id="cameraOverlay" hidden>
+      <div class="camera-overlay-header">
+        <button class="btn btn-ghost" id="cancelCameraBtn">✕ 取消</button>
+        <span class="camera-title">拍照</span>
+        <span></span>
+      </div>
+      <video class="camera-overlay-video" id="cameraOverlayVideo" autoplay playsinline muted></video>
+      <div class="camera-overlay-controls">
+        <button class="camera-shutter" id="cameraShutterBtn" aria-label="拍照"></button>
+      </div>
+    </div>
+
     <main class="main">
       <!-- 步骤进度条 -->
       <div class="wizard-progress" id="wizardProgress">
