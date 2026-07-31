@@ -9,6 +9,6 @@
  * 4. 将下方占位符替换为你的实际值
  */
 const SUPABASE_CONFIG = {
-  url: 'https://YOUR_PROJECT.supabase.co',
-  anonKey: 'YOUR_ANON_KEY'
+  url: 'https://cbihchnwnzcdislgkos.supabase.co',
+  anonKey: 'sb_publishable_G2RTnJiJzekYJODIB5RzzQ_veJhSrb-'
 };
